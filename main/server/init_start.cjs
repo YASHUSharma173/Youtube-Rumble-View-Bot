@@ -13,7 +13,7 @@ const defaultServerInfo = require("./vars.cjs").defaultServerInfo;
 
 
 
-const db = new Sqlite3.Database(path.join(app_path, `../database.db3`))
+const db = new Sqlite3.Database(path.join(process.env.APP_PATH || '/opt/render/project/src', '../database.db'));
 const sqlitestore = SQLiteStore(session)
 
 const app = express();
