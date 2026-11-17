@@ -1,15 +1,13 @@
 {
   "name": "youtube-rumble-view-bot",
   "version": "1.0.0",
-  "description": "Headless view bot server with stealth",
+  "description": "Headless view bot server",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
     "express": "^4.18.2",
-    "puppeteer": "^21.0.0",
-    "puppeteer-extra": "^3.3.6",
-    "puppeteer-extra-plugin-stealth": "^2.11.2"
+    "puppeteer": "^21.0.0"
   }
 }
