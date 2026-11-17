@@ -1,68 +1,99 @@
 const express = require('express');
 const path = require('path');
-const { db, startServer } = require('./server/init_start.cjs');
+const puppeteer = require('puppeteer-extra');
+const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+
+// Stealth plugin add kar rahe hain taaki bot detect na ho
+puppeteer.use(StealthPlugin());
 
 const app = express();
-const router = express.Router();
+const PORT = process.env.PORT || 10000;
 
-// Middleware setup
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Database mein links table ensure karna
-db.run(`CREATE TABLE IF NOT EXISTS rumble_links (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  url TEXT NOT NULL,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-)`);
+// In-memory list saved links ke liye
+let savedLinks = [];
 
-// 1. Status route with input form
-router.get('/', (req, res) => {
-  res.status(200).send(`
-    <div style="font-family: Arial, sans-serif; margin: 40px;">
-      <h2>Youtube-Rumble-View-Bot Headless Server is Running!</h2>
-      <p>Apna Rumble video ka link yahan daalein:</p>
-      <form action="/add-link" method="POST">
-        <input type="text" name="url" placeholder="Enter Rumble Video URL" style="width: 350px; padding: 10px;" required />
-        <button type="submit" style="padding: 10px 20px; background: #000; color: #fff; border: none; cursor: pointer;">Add Link</button>
-      </form>
-      <br>
-      <a href="/links" target="_blank">Saved Links Dekhein</a>
-    </div>
-  `);
+// Homepage with input form
+app.get('/', (req, res) => {
+    res.status(200).send(`
+        <div style="font-family: Arial, sans-serif; margin: 40px;">
+            <h2>Youtube-Rumble-View-Bot Headless Server (Stealth Enabled)</h2>
+            <p>Apna Rumble ya YouTube video ka link yaha daalein:</p>
+            <form action="/add-link" method="POST">
+                <input type="text" name="url" placeholder="Enter Video URL" style="width: 300px; padding: 8px;" required>
+                <button type="submit" style="padding: 9px 20px; background: #000; color: #fff; border: none; cursor: pointer;">Add Link & View</button>
+            </form>
+            <br>
+            <a href="/links" target="_blank">Saved Links Dekhein</a>
+        </div>
+    `);
 });
 
-// 2. Link add karne ka route (POST)
-router.post('/add-link', (req, res) => {
-  const videoUrl = req.body.url;
-  if (!videoUrl) {
-    return res.status(400).send('URL is required!');
-  }
+// Saved links route
+app.get('/links', (req, res) => {
+    res.json(savedLinks);
+});
 
-  db.run(`INSERT INTO rumble_links (url) VALUES (?)`, [videoUrl], function(err) {
-    if (err) {
-      console.error(err.message);
-      return res.status(500).send('Database error while saving link.');
+// Add link and run automated view bot with stealth
+app.post('/add-link', async (req, res) => {
+    const videoUrl = req.body.url;
+    if (videoUrl) {
+        savedLinks.push({ url: videoUrl, time: new Date() });
+        
+        // Background me view bot run karna
+        runViewBot(videoUrl).catch(err => console.error("Bot Error:", err));
+
+        res.send(`
+            <script>
+                alert('Link successfully add ho gaya aur view bot background me chal pada!');
+                window.location.href = '/';
+            </script>
+        `);
+    } else {
+        res.status(400).send('URL is required!');
     }
-    res.send(`<h3>Link successfully added! ID: ${this.lastID}</h3><a href="/">Go Back</a>`);
-  });
 });
 
-// 3. Saved links dekhne ka route
-router.get('/links', (req, res) => {
-  db.all(`SELECT * FROM rumble_links`, [], (err, rows) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
+// View bot function using Puppeteer Stealth & Watch Delay
+async function runViewBot(url) {
+    console.log(`Starting headless browser for URL: ${url}`);
+    let browser;
+    try {
+        browser = await puppeteer.launch({
+            headless: true,
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-accelerated-2d-canvas',
+                '--disable-gpu'
+            ]
+        });
+
+        const page = await browser.newPage();
+        
+        // User agent set karna taaki real browser lage
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+
+        console.log(`Navigating to page...`);
+        await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
+
+        console.log(`Page loaded successfully. Watching video for 45 seconds...`);
+        // Video ko watch time dene ke liye 45 seconds ka delay
+        await new Promise(resolve => setTimeout(resolve, 45000));
+
+        await browser.close();
+        console.log(`Bot finished viewing session for: ${url}`);
+    } catch (error) {
+        console.error(`Error in running view bot for ${url}:`, error);
+        if (browser) {
+            await browser.close();
+        }
     }
-    res.json(rows);
-  });
+}
+
+app.listen(PORT, () => {
+    console.log(`Server is successfully listening on port ${PORT}`);
 });
-
-app.use('/', router);
-
-const PORT = process.env.PORT || 10000;
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server is successfully listening on port ${PORT}`);
-});
-
-module.exports = app;
